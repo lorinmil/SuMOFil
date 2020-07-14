@@ -1,0 +1,195 @@
+---
+title: "SuMO-Fil: Supervised Multi-Omic Filtering"
+author: "Lorin Towle-Miller"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+
+library(SuMOFil)
+```
+
+## Package Info
+
+Provide functions for simulating gene pathway networks with a continuous outcome, and a filtering method to trim some of the high dimensional noise. Note that under this setting, it is assumed that data type G has pathway elements that relate to pathway elements in data type X, which then those pathway elements in X relate to the outcome Y. 
+
+In addition to the pathway elements, there are elements within X that are related to Y but not G, elements within X that are related to G but not Y, and elements within X that are not related to G or Y Similarly, there are elements within G that are related to Y and not X, elements within G that are related to X and not Y, and elements within G that are no related to X or Y. 
+
+The goal of Supervised Multi-Omic Filtering (SuMO-Fil) is to remove elements from X and G that are not pathway elements.
+
+## Functions
+
+### simPathwaySystem
+
+simPathwaySystem(alpha, Rsq, nsample, rind, nx, nxPrime, ns, ntranscriptNoise, ng, ngPrime, nh, ngeneNoise, noiseSD)
+
+**Purpose** 
+
+Simulate a pathway network between two data types and a corresponding continuous outcome.
+
+**Parameters**
+
+- *alpha*: Factor that controls the differences in strength between the relationships the pathway elements of X and G as compared to the strength in the relationship between Y with X and G in the pathway.
+
+- *Rsq*: Factor controlling the differences in variances across X as compared to X given G
+
+- *nsample*: Number of observations to generate in the system
+
+- *rind*: Base measure for the variance within an observation
+
+- *nx*: Number of pathway elements in the data type X (related to G and Y)
+
+- *nxPrime*: Number of elements within X that are related to G and not Y
+
+- *ns*: Number of elements within X that are related to Y and not G
+
+- *ntranscriptNoise*: Number of elements within X that are not related to G or Y
+
+- *ng*: Number of pathway elements in the data type G (related to X and Y)
+
+- *ngPrime*: Number of elements within G that are related to X and not Y
+
+- *nh*: Number of elements within G that are related to Y and not X
+
+- *ngeneNoise*: Number of elements within G that are not related to X or Y
+
+- *noiseSD*: Standard deviation to use on the noise elements in both X and G
+
+**Details**
+
+All simulations are performed on a multivariate normal distribution and parameters are collected that control the covariance structure between all element types in X, all element types in G, and outcome Y.
+
+**Value**
+
+A list containing the following values:
+
+- *x*: Dataframe of the simulated X values with dimensions nsample (rows) by (nx + nxPrime + ns + ntranscriptNoise) (columns)
+
+- *g*: Dataframe of the simulated G values with dimensions nsample (rows) by (ng + ngPrime + nh + ngeneNoise) (columns)
+
+- *y*: Dataframe of the simulated outcome Y with dimensions nsample (rows) by 1
+
+- *indicatorX*: A vector of length (nx + nxPrime + ns + ntranscriptNoise) that labels the corresponding columns within x as either "pathway" or "not in pathway"
+
+- *indicatorG*: A vector of length (ng + ngPrime + nh + ngeneNoise) that labels the corresponding columns within g as either "pathway" or "not in pathway"
+
+**Examples**
+
+```{r}
+#Simulate a system with 200 observations
+simSystem <- simPathwaySystem(
+  alpha = 0.35
+  ,Rsq = 0.35
+  ,nsample = 200
+  ,rind = 0.35
+  ,nx = 15
+  ,nxPrime = 100
+  ,ns = 50
+  ,ntranscriptNoise = 100
+  ,ng = 10
+  ,ngPrime = 100
+  ,nh = 30
+  ,ngeneNoise = 100
+  ,noiseSD = 0.5
+)
+```
+
+### SuMOFil
+
+SuMOFil(x, g, y,numClusters_1, numClusters_2)
+
+**Purpose**  
+
+Remove elements from x and g that are not related to each other or y.
+
+**Parameters**
+
+- *x*: A matrix of the X values where the rows represent the samples and the columns represent the elements
+
+- *g*: A matrix of the G values where the rows represent the samples and the columns represent the elements
+
+- *y*: A vector (or dataframe with 1 column) of the continuous outcomes for each of the samples
+
+- *numClusters_1*: Number of k-means clusters to use for filtering on the first round (between relationships of X and Y and relationships of G and Y)
+
+- *numClusters_2*: Number of k-means clusters to use for filtering on the second round (between relationships of X and G)
+
+**Details**
+
+The goal of SuMO-Fil is to remove elements in X and G that are not related to eachother OR the outcome Y. By filtering out elements, it can speed up underlying pathway analyses.
+
+The first round in the filtering process compares the relationships between X and Y and the relationships between G and Y. SuMO-Fil will find the absolute value of the correlations between each element of X with the outcome Y, and then perform k-means clustering the absolute correlations. All elements of X that correspond to the lowest cluster are noted (not yet filtered unless criteria from the second round is also met). A similar process is repeated for measuring the correlations between G and Y.
+
+The second round in SuMO-Fil compares the relationships between X and G. It will find the absolute value of the correlation matrix between X and G. Then it will sum across all elements of G for each element X and perform a k-means clustering on the absolute correlation sums. All elements of X that correspond to the lowest cluster are noted (not yet filtered unless criteria from the first round is also met). A similar process is again repeated for G by taking the sums across all elements in X for each element in G.
+
+All elements of X that were noted in both the first AND second rounds as belonging in the smallest cluster are filtered out. Additionally, all elements of G that were noted in both the first AND second roungs as belonging to the smallest cluster are filtered out.
+
+**Values**
+
+A list containing the following values:
+
+- *corXY*: A vector containing the absolute correlations between X and Y
+
+- *corGY*: A vector containing the absolute correlations between G and Y
+
+- *xSums*: A vector of the absolute correlation sums across all elements in G for each element in X
+
+- *gSums*: A vector of the absolute correlation sums across all elements in X for each element in G
+
+- *removeX_1*: A vector of the indices corresponding to the elements in X that were noted in the first round as belonging to the smallest cluster
+
+- *removeG_1*: A vector of the indices corresponding to the elements in G that were noted in the first round as belonging to the smallest cluster
+
+- *removeX_2*: A vector of the indices corresponding to the elements in X that were noted in the second round as belonging to the smallest cluster
+
+- *removeG_2*: A vector of the indices corresponding to the elements in G that were noted in the second round as belonging to the smallest cluster
+
+- *removeX_both*: A vector of the indices corresponding to the elements in X that were ultimately filtered due to them intersecting between both the first AND second round
+
+- *removeG_both*: A vector of the indices corresponding to the elements in G that were ultimately filtered due to them intersecting between both the first AND second round
+
+**Examples**
+
+```{r}
+#Simulate a system with 200 observations
+simSystem <- simPathwaySystem(
+  alpha = 0.35
+  ,Rsq = 0.35
+  ,nsample = 200
+  ,rind = 0.35
+  ,nx = 15
+  ,nxPrime = 100
+  ,ns = 50
+  ,ntranscriptNoise = 100
+  ,ng = 10
+  ,ngPrime = 100
+  ,nh = 30
+  ,ngeneNoise = 100
+  ,noiseSD = 0.5
+)
+
+
+#Apply the filters to X and G
+filterResults <- SuMOFil(
+  x = simSystem$x
+  ,g = simSystem$g
+  ,y = simSystem$y
+  ,numClusters_1 = 3
+  ,numClusters_2 = 3
+)
+
+
+#Obtain a finalized filtered X
+x_filtered <- simSystem$x[, -filterResults$removeX_both]
+#Obtain a finalized filtered X
+g_filtered <- simSystem$g[, -filterResults$removeG_both]
+```

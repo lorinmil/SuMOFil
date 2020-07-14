@@ -1,0 +1,13 @@
+Package: SuMOFil
+Type: Package
+Title: SuMOFil: Supervised Multi-Omic Filtering
+Version: 0.1.1
+Author: Lorin Towle-Miller, Jeffrey Miecznikowski, Fan Zhang, and David Tritchler
+Maintainer: The package maintainer <yourself@somewhere.net>
+Description: Gene filtering algorithm for network analysis that involves two data types.
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+Suggests: knitr,
+    rmarkdown
+VignetteBuilder: knitr
